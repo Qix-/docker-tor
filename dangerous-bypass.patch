@@ -1,0 +1,74 @@
+--- src/lib/fs/dir.c.orig       2022-01-28 13:58:30.953518431 +0000
++++ src/lib/fs/dir.c    2022-01-28 14:06:10.375597291 +0000
+@@ -48,6 +48,7 @@
+
+ #include <errno.h>
+ #include <string.h>
++#include <stdlib.h>
+
+ /** Check whether <b>dirname</b> exists and is private.  If yes return 0.
+  * If <b>dirname</b> does not exist:
+@@ -237,28 +238,42 @@
+     check_bits_filter = 0022;
+   }
+   if ((st.st_mode & unwanted_bits & check_bits_filter) != 0) {
+-    unsigned new_mode;
+-    if (check & CPD_CHECK_MODE_ONLY) {
+-      log_warn(LD_FS, "Permissions on directory %s are too permissive.",
+-               dirname);
+-      close(fd);
+-      return -1;
+-    }
+-    log_warn(LD_FS, "Fixing permissions on directory %s", dirname);
+-    new_mode = st.st_mode;
+-    new_mode |= 0700; /* Owner should have rwx */
+-    if (check & CPD_GROUP_READ) {
+-      new_mode |= 0050; /* Group should have rx */
+-    }
+-    new_mode &= ~unwanted_bits; /* Clear the bits that we didn't want set...*/
+-    if (fchmod(fd, new_mode)) {
+-      log_warn(LD_FS, "Could not chmod directory %s: %s", dirname,
+-               strerror(errno));
+-      close(fd);
+-      return -1;
++    char *skip_checks_env;
++    int skip_checks;
++
++    skip_checks_env = getenv("TOR_DANGEROUSLY_SKIP_PERMISSION_CHECK");
++    skip_checks = skip_checks_env != NULL && strcmp("0", skip_checks_env) != 0;
++
++    if (skip_checks) {
++      log_warn(LD_FS, "Permissions on directory %s are too permissive, "
++                      "but TOR_DANGEROUSLY_SKIP_PERMISSION_CHECK was set.",
++                      dirname);
++      log_warn(LD_FS, "I am DANGEROUSLY continuing without enforcing these persmissions. "
++                      "I hope you know what you're doing.");
+     } else {
+-      close(fd);
+-      return 0;
++      unsigned new_mode;
++      if (check & CPD_CHECK_MODE_ONLY) {
++        log_warn(LD_FS, "Permissions on directory %s are too permissive.",
++                 dirname);
++        close(fd);
++        return -1;
++      }
++      log_warn(LD_FS, "Fixing permissions on directory %s", dirname);
++      new_mode = st.st_mode;
++      new_mode |= 0700; /* Owner should have rwx */
++      if (check & CPD_GROUP_READ) {
++        new_mode |= 0050; /* Group should have rx */
++      }
++      new_mode &= ~unwanted_bits; /* Clear the bits that we didn't want set...*/
++      if (fchmod(fd, new_mode)) {
++        log_warn(LD_FS, "Could not chmod directory %s: %s", dirname,
++                 strerror(errno));
++        close(fd);
++        return -1;
++      } else {
++        close(fd);
++        return 0;
++      }
+     }
+   }
+   close(fd);

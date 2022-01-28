@@ -44,6 +44,10 @@ WORKDIR /tor-$VERSION/
 
 COPY  --from=preparer /tor-$VERSION/  ./
 
+COPY ./dangerous-bypass.patch /tmp/dangerous-bypass.patch
+RUN cp src/lib/fs/dir.c src/lib/fs/dir.c.orig && \
+    patch -o src/lib/fs/dir.c src/lib/fs/dir.c.orig /tmp/dangerous-bypass.patch
+
 RUN ./configure --sysconfdir=/etc --datadir=/var/lib
 RUN make -j$(nproc)
 RUN make install
